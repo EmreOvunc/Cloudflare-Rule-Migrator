@@ -1,0 +1,66 @@
+{# rule_migration_template.j2 #}
+{% for rule in rules_data %}
+resource "cloudflare_ruleset" "zone_rate_limits" {
+  description = "Zone level Rate Limit - {{ rule.zone_name }}"
+  kind        = "zone"
+  name        = "Zone level Rate Limit - {{ rule.zone_name }}"
+  phase       = "http_ratelimit"
+  zone_id     = local.zone_id
+
+  rules {
+    action      = "log"
+    description = "{{ rule.description }}"
+    enabled     = true
+
+    ratelimit {
+      characteristics     = ["ip.src", "cf.colo.id"]
+      period              = {{ rule.period }}
+      requests_per_period = {{ rule.threshold }}
+      mitigation_timeout  = {{ rule.mitigation_timeout }}
+      requests_to_origin  = false
+      {% if rule.counting_expression -%}
+      counting_expression = <<EOF
+        {{ rule.counting_expression | indent(6) }}
+      EOF
+      {% endif -%}
+    }
+
+    expression = <<EOF
+    (
+    {% if rule.host_name -%}
+    http.host {{ rule.host_operator }} "{{ rule.host_pattern }}"
+    {% endif -%}
+
+    {% if rule.path_pattern -%}
+      {% if rule.path_operator == 'eq' -%}
+    and http.request.uri.path eq "{{ rule.path_pattern }}"
+      {% else -%}
+    and http.request.uri.path matches "{{ rule.path_pattern }}"
+      {% endif -%}
+    {% endif -%}
+
+    {% if rule.methods -%}
+      {% if rule.methods|length == 1 -%}
+    and http.request.method eq "{{ rule.methods[0] }}"
+      {% else -%}
+    and http.request.method in { {{ rule.methods|join(' ') }} }
+      {% endif -%}
+    {% endif -%}
+
+    {% if rule.bypass_regex -%}
+    and not (http.request.uri.path matches "{{ rule.bypass_regex }}")
+    {% endif -%}
+
+    {% for header in rule.request_headers -%}
+    and lower(http.request.headers["{{ header.name | lower }}"]) {{ header.op }} "{{ header.value | lower }}"
+    {% endfor -%}
+
+    {% for header in rule.response_headers -%}
+    and lower(http.response.headers["{{ header.name | lower }}"]) {{ header.op }} "{{ header.value | lower }}"
+    {% endfor -%}
+
+    )
+    EOF
+  }
+}
+{% endfor %}
