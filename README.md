@@ -35,6 +35,21 @@ Make sure you have the following installed:
     pip3 install -r requirements.txt
     ```
 
+#### To Dockerize it, follow these steps:
+- In the `app.py`, update the app.run command to bind to all interfaces (0.0.0.0) so that it works inside the Docker container:
+```
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=False)
+```
+- Run the following command to build your Docker image:
+```
+docker build -t cloudflare-rule-migrator .
+```
+- Run the container:
+```
+docker run -d -p 5000:5000 --name rule-migrator cloudflare-rule-migrator
+```
+
 ## Usage
 1. Run the Flask application:
     ```bash
