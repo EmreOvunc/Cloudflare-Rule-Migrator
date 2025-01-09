@@ -1,4 +1,4 @@
-# Cloudflare-Rule-Migrator
+# Cloudflare-Terraform-Rule-Migrator
 Automated Migration of Deprecated Rate-Limiting Rules
 
 # Project Description
