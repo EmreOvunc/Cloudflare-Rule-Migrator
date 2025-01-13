@@ -1,0 +1,21 @@
+resource "cloudflare_ruleset" "{{ rule.resource_name }}" {
+  zone_id     = local.zone_id
+  kind        = "zone"
+  name        = "default"
+  phase       = "http_request_firewall_custom"
+
+  rules {
+    action = "[ACTION]"
+    action_parameters {
+      products = ["rateLimit", "securityLevel", "waf"]
+    }
+    description = "{{ rule.description }}"
+    enabled     = true
+    expression  = <<EOF
+        {{ rule.expression | indent(4, true) }}
+    EOF
+    logging {
+      enabled = true
+    }
+  }
+}
