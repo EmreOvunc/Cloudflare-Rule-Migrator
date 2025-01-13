@@ -25,19 +25,19 @@
     {% endif -%}
 
     {% if rule.path_pattern -%}
-      {% if rule.path_operator == 'eq' -%}
+    {% if rule.path_operator == 'eq' -%}
     and http.request.uri.path eq "{{ rule.path_pattern }}"
-      {% else -%}
+    {% else -%}
     and http.request.uri.path matches "{{ rule.path_pattern }}"
-      {% endif -%}
+    {% endif -%}
     {% endif -%}
 
     {% if rule.methods -%}
-      {% if rule.methods|length == 1 -%}
+    {% if rule.methods|length == 1 -%}
     and http.request.method eq "{{ rule.methods[0] }}"
-      {% else -%}
+    {% else -%}
     and http.request.method in { {{ rule.methods|join(' ') }} }
-      {% endif -%}
+    {% endif -%}
     {% endif -%}
 
     {% if rule.bypass_regex -%}
@@ -45,7 +45,9 @@
     {% endif -%}
 
     {% for header in rule.request_headers -%}
-    and lower(http.request.headers["{{ header.name | lower }}"]) {{ header.op }} "{{ header.value | lower }}"
+    {% if header.name | lower != 'cf-cache-status' -%}
+    and (any(http.request.headers["{{ header.name | lower }}"][*] contains "{{ header.value | lower }}"))
+    {% endif -%}
     {% endfor -%}
     )
     EOF
