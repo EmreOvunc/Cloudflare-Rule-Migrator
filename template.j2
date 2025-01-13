@@ -16,7 +16,7 @@
         {{ rule.counting_expression | indent(6) }}
       EOF
       {% endif -%}
-      }
+    }
 
     expression = <<EOF
     (
@@ -47,11 +47,6 @@
     {% for header in rule.request_headers -%}
     and lower(http.request.headers["{{ header.name | lower }}"]) {{ header.op }} "{{ header.value | lower }}"
     {% endfor -%}
-
-    {% for header in rule.response_headers -%}
-    and lower(http.response.headers["{{ header.name | lower }}"]) {{ header.op }} "{{ header.value | lower }}"
-    {% endfor -%}
-
     )
     EOF
   }
