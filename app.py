@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template_string
+from flask import Flask, request, render_template_string, jsonify
 from jinja2 import Environment, FileSystemLoader
 import re
 
@@ -282,6 +282,45 @@ def parse_deprecated_rule(old_rule_text):
     return data
 
 
+def parse_deprecated_filterrule(old_filter_text):
+    """
+    Parses a deprecated cloudflare_filter rule and extracts relevant fields for migration.
+
+    :param old_filter_text: str, the text content of the deprecated filter rule
+    :return: dict, extracted fields for migration
+    """
+    # Extract resource name
+    resource_name_match = re.search(r'resource\s+"cloudflare_filter"\s+"([^"]+)"', old_filter_text)
+    resource_name = resource_name_match.group(1) if resource_name_match else "migrated_filter_rule"
+
+    # Extract description
+    description_match = re.search(r'description\s*=\s*"([^"]+)"', old_filter_text)
+    description = description_match.group(1) if description_match else "No description provided"
+
+    # Extract expression
+    expression_match = re.search(r'expression\s*=\s*"([^"]+)"', old_filter_text)
+    expression = expression_match.group(1) if expression_match else ""
+
+    # Extract zone_id
+    zone_id_match = re.search(r'zone_id\s*=\s*([^\s]+)', old_filter_text)
+    zone_id = zone_id_match.group(1) if zone_id_match else "example.com"
+
+    # Extract count (if exists)
+    count_match = re.search(r'count\s*=\s*([^\s]+)', old_filter_text)
+    count = count_match.group(1) if count_match else "1"
+
+    # Prepare parsed data
+    parsed_data = {
+        "resource_name": resource_name,
+        "description": description,
+        "expression": expression,
+        "zone_id": zone_id,
+        "count": count,
+    }
+
+    return parsed_data
+
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
@@ -326,13 +365,14 @@ def index():
             </script>
         </head>
         <body>
-            <a href="/"><h1>Migrated Rule</a> - <a href="https://emreovunc.com">@EmreOvunc</a></h1>
+            <a href="/"><h2>Rate Limiting (Migrated Rule)</a> - <a href="/filter">Filter</a></h2>
             <textarea id="convertedRule" readonly>{{ migrated_rule }}</textarea>
             <br>
             <button onclick="copyToClipboard()">Copy to Clipboard</button>
             <br><br>
             <a href="/">Back to Form</a>
         </body>
+        <p><a href="https://emreovunc.com">@EmreOvunc</a>
         </html>
         """, migrated_rule=rendered)
 
@@ -342,7 +382,7 @@ def index():
     <html>
       <head><title>Cloudflare Rule Migrator</title></head>
       <body>
-        <a href="/"><h1>Cloudflare Rule Migrator</a> - <a href="https://emreovunc.com">@EmreOvunc</a></h1>
+        <a href="/"><h2>Rate Limiting</a> - <a href="/filter">Filter</a></h2>
         <form method="POST">
           <p>Paste your deprecated <code>cloudflare_rate_limit</code> rule here:</p>
           <textarea name="deprecated_rule" rows="20" cols="80"></textarea>
@@ -350,8 +390,85 @@ def index():
           <input type="submit" value="Convert Rule"/>
         </form>
       </body>
+      <p><a href="https://emreovunc.com">@EmreOvunc</a>
     </html>
     """)
+
+@app.route('/filter', methods=['GET', 'POST'])
+def filter_migrator():
+    if request.method == 'POST':
+        # Get data from the POST request
+        old_filter_data = request.form.get('convertedRule', '')
+
+        # Ensure required data is present
+        if not old_filter_data or 'expression' not in old_filter_data or 'description' not in old_filter_data:
+            return jsonify({"error": "Invalid input. 'expression' and 'description' are required fields."}), 400
+
+        # Parse user input
+        parsed_data = parse_deprecated_filterrule(old_filter_data)
+        template = env.get_template("template-filter.j2")
+        new_ruleset = template.render(rule=parsed_data)
+
+        # Return the new ruleset as a response
+        # Show the migrated rule
+        return render_template_string("""
+        <!doctype html>
+        <html>
+        <head>
+            <title>Migrated Rule</title> 
+            <style>
+                textarea {
+                    width: 100%;
+                    height: 300px;
+                    font-family: monospace;
+                    font-size: 14px;
+                }
+                button {
+                    margin-top: 10px;
+                    padding: 10px 20px;
+                    font-size: 14px;
+                    cursor: pointer;
+                }
+            </style>
+            <script>
+                function copyToClipboard() {
+                    const textArea = document.getElementById("convertedRule");
+                    textArea.select();
+                    textArea.setSelectionRange(0, 99999); // For mobile devices
+                    document.execCommand("copy");
+                    alert("Copied to clipboard!");
+                }
+            </script>
+        </head>
+        <body>
+            <a href="/"><h2>Rate Limiting</a> - <a href="/filter">Filter (Migrated Rule)</a></h2>
+            <textarea id="convertedRule" readonly>{{ migrated_rule }}</textarea>
+            <br>
+            <button onclick="copyToClipboard()">Copy to Clipboard</button>
+            <br><br>
+            <a href="/filter">Back to Form</a>
+        </body>
+        <p><a href="https://emreovunc.com">@EmreOvunc</a>
+        </html>
+        """, migrated_rule=new_ruleset)
+    else:
+        # GET request => Show form to paste the old rule
+        return render_template_string("""
+           <!doctype html>
+           <html>
+             <head><title>Cloudflare Rule Migrator</title></head>
+             <body>
+               <a href="/"><h2>Rate Limiting</a> - <a href="/filter">Filter</a></h2>
+               <form method="POST">
+                 <p>Paste your deprecated <code>cloudflare_filter</code> rule here:</p>
+                 <textarea name="convertedRule" rows="20" cols="80"></textarea>
+                 <br><br>
+                 <input type="submit" value="Convert Rule"/>
+               </form>
+             </body>
+             <p><a href="https://emreovunc.com">@EmreOvunc</a>
+           </html>
+           """)
 
 if __name__ == "__main__":
     app.run(debug=True)
