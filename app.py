@@ -191,7 +191,7 @@ def parse_deprecated_rule(old_rule_text):
             name_match = re.search(r'"name"\s*=\s*"([^"]+)"', entry)
             op_match = re.search(r'"op"\s*=\s*"([^"]+)"', entry)
             value_match = re.search(r'"value"\s*=\s*"([^"]+)"', entry)
-            if name_match and op_match and value_match:
+            if name_match and op_match and value_match and name_match.group(1).lower() != 'cf-cache-status':
                 request_header_list.append({
                     "name": name_match.group(1),
                     "op": op_match.group(1),
@@ -218,14 +218,41 @@ def parse_deprecated_rule(old_rule_text):
                 })
 
     # 10. Parse statuses from lines like `statuses = [301, 404]` => counting_expression
+    # Initialize an empty list to hold parts of the counting expression
+    counting_expression_parts = []
+
+    # Parse statuses (e.g., http.response.code in { 301 404 })
     statuses_match = re.search(r'statuses\s*=\s*\[([^]]+)\]', old_rule_text)
     if statuses_match:
         statuses_str = statuses_match.group(1).strip()
         statuses = re.findall(r'\d+', statuses_str)
         if statuses:
-            counting_expression = f"(http.response.code in {{ {' '.join(statuses)} }})"
-        else:
-            counting_expression = ""
+            counting_expression_parts.append(f"(http.response.code in {{ {' '.join(statuses)} }})")
+
+    # Parse response headers for counting_expression
+    response_headers_block_match = re.search(
+        r'"name"\s*=\s*"Cf-Cache-Status".*?"op"\s*=\s*"([^"]+)".*?"value"\s*=\s*"([^"]+)"',
+        old_rule_text,
+        re.DOTALL
+    )
+
+    if response_headers_block_match:
+        op = response_headers_block_match.group(1)
+        value = response_headers_block_match.group(2).lower()  # Ensure case-insensitivity
+        if op == "eq":
+            counting_expression_parts.append(
+                f"not (any(http.response.headers[\"cf-cache-status\"][*] == \"{value}\") or "
+                f"any(http.response.headers[\"cf-cache-status\"][*] == \"{value.upper()}\"))"
+            )
+        elif op == "ne":
+            counting_expression_parts.append(
+                f"(any(http.response.headers[\"cf-cache-status\"][*] != \"{value}\") and "
+                f"any(http.response.headers[\"cf-cache-status\"][*] != \"{value.upper()}\"))"
+            )
+
+    # Combine all parts of the counting expression
+    if counting_expression_parts:
+        counting_expression = " and ".join(counting_expression_parts)
     else:
         counting_expression = ""
 
